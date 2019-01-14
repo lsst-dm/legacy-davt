@@ -15,7 +15,15 @@ RUN ln -sf /dev/stdout /var/log/nginx/access.log \
 RUN luarocks install ljsyscall
 
 ADD rootfs/ /
-ADD impersonate.lua /etc/nginx/scripts/impersonate.lua
+ADD davt.lua /etc/nginx/scripts/davt.lua
 EXPOSE 80
+
+RUN adduser bvan --disabled-password --home /data/www/u/bvan
+RUN echo "world" > /data/www/u/bvan/hello && \
+    chown bvan:bvan /data/www/u/bvan/hello && \
+    chmod 700 /data/www/u/bvan/hello
+
+RUN adduser john --disabled-password --home /data/www/u/john
+
 
 CMD ["/bin/bash", "/run.sh"]
