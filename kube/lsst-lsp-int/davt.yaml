@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: davt-deployment
+  labels:
+    app: davt
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: davt
+  template:
+    metadata:
+      labels:
+        app: davt
+    spec:
+      containers:
+      - name: davt
+        image: lsstdm/davt
+        ports:
+        - containerPort: 8080
+        volumeMounts:
+        - name: davt-nginx-config-volume
+          mountPath: "/etc/nginx/nginx.conf"
+          subPath: nginx.conf
+          readOnly: true
+        - name: davt-datasets-volume
+          mountPath: "/datasets"
+          readOnly: true
+        - mountPath: /cache
+          name: cache-volume
+      volumes:
+      - name: davt-nginx-config-volume
+        configMap:
+          name: davt-nginx-config
+      - name: davt-datasets-volume
+        persistentVolumeClaim:
+          claimName: davt-datasets-claim
+      - name: cache-volume
+        emptyDir: {}
+
+---
+
+kind: Service
+apiVersion: v1
+metadata:
+  name: davt-service
+spec:
+  selector:
+    app: davt
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80
+
+---
+
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/auth-url: "http://oauth2-proxy.lsst-pdac.svc.cluster.local:4180/auth"
+    nginx.ingress.kubernetes.io/auth-response-headers: X-Forwarded-User
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      auth_request_set $user $upstream_http_x_auth_request_user;
+      add_header REMOTE_USER $user;
+
+  name: davt-ingress
+spec:
+  rules:
+  - host: lsst-pdac.ncsa.illinois.edu
+    http:
+      paths:
+      - path: /workspace
+        backend:
+          serviceName: davt-service
+          servicePort: 80
