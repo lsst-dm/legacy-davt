@@ -41,10 +41,11 @@ local function setfsuid(uid)
     -- don't need to worry about saved UIDs
 
     -- Two calls are always needed for setfsuid
-    local previous = _setfsuid(uid)
-    local actual = _setfsuid(uid)
+    local _uid = tonumber(uid)
+    local previous = _setfsuid(_uid)
+    local actual = _setfsuid(_uid)
 
-    if actual ~= uid then
+    if actual ~= _uid then
         ngx.log(ngx.CRIT, "Unable to impersonate users")
         ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
     end
@@ -55,7 +56,7 @@ end
 --
 -- @param gid The GID for filesytem operations.
 local function setgid(gid)
-    if not syscall_api.setgid(passwd.pw_gid) then
+    if not syscall_api.setgid(tonumber(gid)) then
         ngx.log(ngx.CRIT, "Unable to set gid")
         ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
     end
@@ -69,14 +70,22 @@ end
 -- @param username
 -- @param gid The GID for filesytem operations.
 local function initgroups(username, gid)
-    if not _initgroups(username, gid) then
+    if not _initgroups(username, tonumber(gid)) then
         ngx.log(ngx.CRIT, "Unable init groups")
         ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
     end
 end
 
+--- Set supplementary groups for a user.
+-- This is the nginx-friendly function.
+--
+-- @param groups list of the supplementary groups for the user
 local function setgroups(groups)
-    if not syscall_api.setgroups(groups) then
+    _groups = {}
+    for i, group in ipairs(groups) do
+      _groups[i] = tonumber(group)
+    end
+    if not syscall_api.setgroups(_groups) then
         ngx.log(ngx.CRIT, "Unable set groups")
         ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
     end
@@ -96,7 +105,7 @@ local function init_user(username, uid)
     if username then
         passwd = ffi.C.getpwnam(username)
     elseif uid then
-        passwd = ffi.C.getpwuid(uid)
+        passwd = ffi.C.getpwuid(tonumber(uid))
     end
 
     if passwd == nil then
@@ -124,7 +133,7 @@ end
 -- @param gid the GID of the user
 -- @param groups the collection of supplementary GIDs for the user
 local function set_user(uid, gid, groups)
-    ngx.log(ngx.NOTICE, "[Impersonating UID #" .. passwd.pw_uid .. ", GID #" .. passwd.pw_gid .. "]")
+    ngx.log(ngx.NOTICE, "[Impersonating UID #" .. uid .. ", GID #" .. gid .. "]")
     setfsuid(uid)
     setgid(gid)
     setgroups(groups)
@@ -138,6 +147,9 @@ local function init_user_from_username(username)
     return init_user(username, nil)
 end
 
+M.setfsuid = setfsuid
+M.setgid = setgid
+M.setgroups = setgroups
 M.set_user = set_user
 M.init_user = init_user
 M.init_user_from_uid = init_user_from_uid
