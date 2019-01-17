@@ -35,7 +35,7 @@ spec:
           name: davt-nginx-config
       - name: davt-datasets-volume
         persistentVolumeClaim:
-          claimName: davt-datasets-claim
+          claimName: datasets-lsst-pdac
       - name: cache-volume
         emptyDir: {}
 
@@ -61,20 +61,20 @@ metadata:
   annotations:
     kubernetes.io/ingress.class: nginx
     nginx.ingress.kubernetes.io/auth-url: "http://oauth2-proxy.lsst-pdac.svc.cluster.local:4180/auth"
-    nginx.ingress.kubernetes.io/auth-response-headers: X-Forwarded-User
-    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/auth-response-headers: X-Auth-Request-Uid
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/configuration-snippet: |
-      auth_request_set $user $upstream_http_x_auth_request_user;
-      add_header REMOTE_USER $user;
 
   name: davt-ingress
 spec:
   rules:
-  - host: lsst-pdac.ncsa.illinois.edu
+  - host: lsst-lsp-int.ncsa.illinois.edu
     http:
       paths:
       - path: /workspace
         backend:
           serviceName: davt-service
           servicePort: 80
+  tls:
+  - hosts:
+    - lsst-lsp-int.ncsa.illinois.edu
+    secretName: tls-certificate-lsp-int
