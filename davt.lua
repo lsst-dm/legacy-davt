@@ -41,6 +41,11 @@ local function setfsuid(uid)
     -- don't need to worry about saved UIDs
 
     -- Two calls are always needed for setfsuid
+    if uid == nil or uid == 0 then
+        ngx.log(ngx.CRIT, "Unable to impersonate user: uid is nil")
+        ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
+    end
+
     local _uid = tonumber(uid)
     local previous = _setfsuid(_uid)
     local actual = _setfsuid(_uid)
@@ -56,6 +61,11 @@ end
 --
 -- @param gid The GID for filesytem operations.
 local function setgid(gid)
+    if gid == nil or gid == 0 then
+        ngx.log(ngx.CRIT, "Unable to impersonate group: gid is nil")
+        ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
+    end
+
     if not syscall_api.setgid(tonumber(gid)) then
         ngx.log(ngx.CRIT, "Unable to set gid")
         ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
@@ -70,6 +80,10 @@ end
 -- @param username
 -- @param gid The GID for filesytem operations.
 local function initgroups(username, gid)
+    if gid == nil or gid == 0 then
+        ngx.log(ngx.CRIT, "Unable to initgroups: gid is nil")
+        ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
+    end
     if not _initgroups(username, tonumber(gid)) then
         ngx.log(ngx.CRIT, "Unable init groups")
         ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
@@ -83,6 +97,10 @@ end
 local function setgroups(groups)
     _groups = {}
     for i, group in ipairs(groups) do
+        if group == nil or group == 0 then
+            ngx.log(ngx.CRIT, "Unable to setgroups: group is nil")
+            ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
+        end
       _groups[i] = tonumber(group)
     end
     if not syscall_api.setgroups(_groups) then
@@ -104,7 +122,7 @@ local function init_user(username, uid)
     local passwd
     if username then
         passwd = ffi.C.getpwnam(username)
-    elseif uid then
+    elseif uid and uid ~= 0 then
         passwd = ffi.C.getpwuid(tonumber(uid))
     end
 
