@@ -60,9 +60,9 @@ kind: Ingress
 metadata:
   annotations:
     kubernetes.io/ingress.class: nginx
-    nginx.ingress.kubernetes.io/auth-url: "http://oauth2-proxy.lsst-pdac.svc.cluster.local:4180/auth"
+    nginx.ingress.kubernetes.io/auth-url: "https://lsst-lsp-int.ncsa.illinois.edu/auth"
     nginx.ingress.kubernetes.io/auth-response-headers: X-Auth-Request-Uid
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # nginx.ingress.kubernetes.io/ssl-redirect: "true"
 
   name: davt-ingress
 spec:
