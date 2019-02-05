@@ -44,7 +44,7 @@ function davt:new(opts)
     self.__index = self
 
     if new_davt.secret == nil then
-        ngx.log(ngx.WARN, "davt: secret isn't set. Setting a new secret.")
+        ngx.log(ngx.WARN, "davt: secret isn't set. Setting a new secret")
         local buf = ffi.typeof("char[?]")(32)
         local _, err = syscall_api.getrandom(buf, 32)
         if err ~= nil then
@@ -67,7 +67,7 @@ end
 function davt:check_access()
     -- The secret can never be nil, but it can be an empty string
     if self.secret == nil then
-        ngx.log(ngx.CRIT, "davt: secret isn't set. See `new`.")
+        ngx.log(ngx.CRIT, "davt: secret isn't set. See `davt:new`.")
         ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
     end
 
@@ -95,7 +95,7 @@ function davt:setfsuid(uid)
     self:check_access()
     -- Two calls are always needed for setfsuid
     if uid == nil or uid == 0 then
-        ngx.log(ngx.CRIT, "Unable to impersonate user: uid is nil")
+        ngx.log(ngx.CRIT, "davt: no uid specified")
         ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
     end
 
@@ -104,7 +104,7 @@ function davt:setfsuid(uid)
     local actual = _setfsuid(_uid)
 
     if actual ~= _uid then
-        ngx.log(ngx.CRIT, "Unable to impersonate users")
+        ngx.log(ngx.CRIT, "davt: setfsuid failed")
         ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
     end
 end
@@ -112,7 +112,7 @@ end
 --- Set the File System GID for the process.
 -- This is the nginx-friendly function.
 -- @param gid The GID of the user for filesytem operations.
-function davt:setfguid(gid)
+function davt:setfsgid(gid)
     self:check_access()
 
     -- Note: This is possibly unecessary, as it appears to be the case that
@@ -123,16 +123,16 @@ function davt:setfguid(gid)
     -- don't need to worry about saved UIDs
     -- Two calls are always needed for setfsuid
     if gid == nil or gid == 0 then
-        ngx.log(ngx.CRIT, "Unable to impersonate user: gid is nil")
+        ngx.log(ngx.CRIT, "davt: no gid specified")
         ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
     end
 
-    local _uid = tonumber(gid)
-    local previous = _setfsgid(_uid)
-    local actual = _setfsgid(_uid)
+    local _gid = tonumber(gid)
+    local previous = _setfsgid(_gid)
+    local actual = _setfsgid(_gid)
 
     if actual ~= _uid then
-        ngx.log(ngx.CRIT, "Unable to impersonate users")
+        ngx.log(ngx.CRIT, "davt: setfsgid failed")
         ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
     end
 end
@@ -145,12 +145,12 @@ function davt:setgid(gid)
     self:check_access()
 
     if gid == nil or gid == 0 then
-        ngx.log(ngx.CRIT, "Unable to impersonate group: gid is nil")
+        ngx.log(ngx.CRIT, "davt: no gid specified")
         ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
     end
 
     if not syscall_api.setgid(tonumber(gid)) then
-        ngx.log(ngx.CRIT, "Unable to set gid")
+        ngx.log(ngx.CRIT, "davt: setgid failed")
         ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
     end
 end
@@ -166,11 +166,11 @@ function davt:initgroups(username, gid)
     self:check_access()
 
     if gid == nil or gid == 0 then
-        ngx.log(ngx.CRIT, "Unable to initgroups: gid is nil")
+        ngx.log(ngx.CRIT, "davt: no gid specified")
         ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
     end
     if not _initgroups(username, tonumber(gid)) then
-        ngx.log(ngx.CRIT, "Unable init groups")
+        ngx.log(ngx.CRIT, "davt: initgroups failed")
         ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
     end
 end
@@ -185,13 +185,13 @@ function davt:setgroups(groups)
     _groups = {}
     for i, group in ipairs(groups) do
         if group == nil or group == 0 then
-            ngx.log(ngx.CRIT, "Unable to setgroups: group is nil")
+            ngx.log(ngx.CRIT, "davt: nil group found in groups list")
             ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
         end
       _groups[i] = tonumber(group)
     end
     if not syscall_api.setgroups(_groups) then
-        ngx.log(ngx.CRIT, "Unable set groups")
+        ngx.log(ngx.CRIT, "davt: setgroups failed")
         ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
     end
 end
