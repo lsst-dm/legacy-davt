@@ -16,7 +16,7 @@ ffi.cdef[[
     struct passwd *getpwnam(const char *name);
     struct passwd *getpwuid(uid_t uid);
     int setfsuid(uid_t fsuid);
-    int setfsgid(uid_t fsuid);
+    int setfsgid(uid_t fsgid);
 ]]
 
 local davt = {}
