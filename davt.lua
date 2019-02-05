@@ -1,6 +1,5 @@
 local ffi = require("ffi")
 local syscall_api = require("syscall") -- loads ffi.C for us
-local nr = require("syscall.linux.nr")
 
 -- What's missing in ljsyscall
 ffi.cdef[[
@@ -16,23 +15,76 @@ ffi.cdef[[
     };
     struct passwd *getpwnam(const char *name);
     struct passwd *getpwuid(uid_t uid);
+    int setfsuid(uid_t fsuid);
+    int setfsgid(uid_t fsuid);
 ]]
 
-local M = {}
+local davt = {}
 
 local function _initgroups(user, gid)
     return ffi.C.initgroups(user, gid) == 0
 end
 
-
 local function _setfsuid(id)
-    return tonumber(ffi.C.syscall(nr.SYS.setfsuid, ffi.typeof("unsigned int")(id)))
+    return ffi.C.setfsuid(ffi.typeof("unsigned int")(id))
 end
+
+local function _setfsgid(id)
+    return ffi.C.setfsgid(ffi.typeof("unsigned int")(id))
+end
+
+--- Create a new davt object
+-- @param opts The options, only `secret` is used. If opts.secret is nil,
+-- then we ALWAYS create a random secret so we are secure by default. If
+-- it's desired to disable secret checking, than opt.secret should be set
+-- to the empty string.
+function davt:new(opts)
+    new_davt = opts or {}   -- create object if user does not provide one
+    setmetatable(new_davt, self)
+    self.__index = self
+
+    if new_davt.secret == nil then
+        ngx.log(ngx.WARN, "davt: secret isn't set. Setting a new secret.")
+        local buf = ffi.typeof("char[?]")(32)
+        local _, err = syscall_api.getrandom(buf, 32)
+        if err ~= nil then
+            ngx.log(ngx.CRIT, "davt: error initializing secret")
+            ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
+        end
+        local buf64 = ngx.encode_base64(ffi.string(buf))
+        new_davt.secret = string.gsub(buf64, "=", "")
+    end
+    ngx.log(ngx.NOTICE, "davt: expecting secret in x-davt-secret header: "  ..
+            new_davt.secret)
+    return new_davt
+end
+
+--- Check access
+-- This function checks access for every request. Either the "x-davt-secret"
+-- header MUST be set to the secret configured in `lua_davt:new` OR,
+-- if the empty string is configured for the secret, than x-davt-secret must
+-- either be omitted or also an empty string.
+function davt:check_access()
+    -- The secret can never be nil, but it can be an empty string
+    if self.secret == nil then
+        ngx.log(ngx.CRIT, "davt: secret isn't set. See `new`.")
+        ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
+    end
+
+    -- We want to always check against a string _in case_ the user EXPLICITLY
+    -- set the secret to an empty string
+    local davt_secret_header = ngx.req.get_headers()['x-davt-secret'] or ""
+    if self.secret ~= davt_secret_header then
+        ngx.log(ngx.CRIT, "davt: unable to validate secret header")
+        ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
+    end
+end
+
 
 --- Set the File System UID for the process.
 -- This is the nginx-friendly function.
 -- @param uid The UID of the user for filesytem operations.
-local function setfsuid(uid)
+function davt:setfsuid(uid)
     -- Note: This is possibly unecessary, as it appears to be the case that
     -- files are always opened in the worker process and _often_
     -- processed in a thread, and that once you have the handle it's
@@ -40,6 +92,7 @@ local function setfsuid(uid)
     -- setuid would work just fine, but setfsuid is still nice because you
     -- don't need to worry about saved UIDs
 
+    self:check_access()
     -- Two calls are always needed for setfsuid
     if uid == nil or uid == 0 then
         ngx.log(ngx.CRIT, "Unable to impersonate user: uid is nil")
@@ -56,11 +109,41 @@ local function setfsuid(uid)
     end
 end
 
+--- Set the File System GID for the process.
+-- This is the nginx-friendly function.
+-- @param gid The GID of the user for filesytem operations.
+function davt:setfguid(gid)
+    self:check_access()
+
+    -- Note: This is possibly unecessary, as it appears to be the case that
+    -- files are always opened in the worker process and _often_
+    -- processed in a thread, and that once you have the handle it's
+    -- the file system wiill always honor it. So, it may be the case that
+    -- setuid would work just fine, but setfsuid is still nice because you
+    -- don't need to worry about saved UIDs
+    -- Two calls are always needed for setfsuid
+    if gid == nil or gid == 0 then
+        ngx.log(ngx.CRIT, "Unable to impersonate user: gid is nil")
+        ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
+    end
+
+    local _uid = tonumber(gid)
+    local previous = _setfsgid(_uid)
+    local actual = _setfsgid(_uid)
+
+    if actual ~= _uid then
+        ngx.log(ngx.CRIT, "Unable to impersonate users")
+        ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
+    end
+end
+
 --- Set the GID for the process
 -- This is the nginx-friendly function. This should be the primary GID.
 --
 -- @param gid The GID for filesytem operations.
-local function setgid(gid)
+function davt:setgid(gid)
+    self:check_access()
+
     if gid == nil or gid == 0 then
         ngx.log(ngx.CRIT, "Unable to impersonate group: gid is nil")
         ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
@@ -79,7 +162,9 @@ end
 --
 -- @param username
 -- @param gid The GID for filesytem operations.
-local function initgroups(username, gid)
+function davt:initgroups(username, gid)
+    self:check_access()
+
     if gid == nil or gid == 0 then
         ngx.log(ngx.CRIT, "Unable to initgroups: gid is nil")
         ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
@@ -94,7 +179,9 @@ end
 -- This is the nginx-friendly function.
 --
 -- @param groups list of the supplementary groups for the user
-local function setgroups(groups)
+function davt:setgroups(groups)
+    self:check_access()
+
     _groups = {}
     for i, group in ipairs(groups) do
         if group == nil or group == 0 then
@@ -118,7 +205,9 @@ end
 --
 -- @param username the username of the user; or
 -- @param uid the uid of the user
-local function init_user(username, uid)
+function davt:init_user(username, uid)
+    self:check_access()
+
     local passwd
     if username then
         passwd = ffi.C.getpwnam(username)
@@ -133,10 +222,11 @@ local function init_user(username, uid)
 
     -- Could get UID and groups here from REMOTE_USER via /etc/passwd
     -- Set FSUID
-    ngx.log(ngx.NOTICE, "[Impersonating UID #" .. passwd.pw_uid .. ", GID #" .. passwd.pw_gid .. "]")
-    setfsuid(passwd.pw_uid)
-    setgid(passwd.pw_gid)
-    initgroups(passwd.pw_name, passwd.pw_gid)
+    ngx.log(ngx.NOTICE, "[Impersonating UID #" .. passwd.pw_uid ..
+            ", GID #" .. passwd.pw_gid .. "]")
+    self:setfsuid(passwd.pw_uid)
+    self:setgid(passwd.pw_gid)
+    self:initgroups(passwd.pw_name, passwd.pw_gid)
 end
 
 --- Set a user for the process.
@@ -150,27 +240,21 @@ end
 -- @param uid the UID of the user
 -- @param gid the GID of the user
 -- @param groups the collection of supplementary GIDs for the user
-local function set_user(uid, gid, groups)
+function davt:set_user(uid, gid, groups)
+    self:check_access()
+
     ngx.log(ngx.NOTICE, "[Impersonating UID #" .. uid .. ", GID #" .. gid .. "]")
-    setfsuid(uid)
-    setgid(gid)
-    setgroups(groups)
+    self:setfsuid(uid)
+    self:setgid(gid)
+    self:setgroups(groups)
 end
 
-local function init_user_from_uid(uid)
-    return init_user(nil, uid)
+function davt:init_user_from_uid(uid)
+    return self:init_user(nil, uid)
 end
 
-local function init_user_from_username(username)
-    return init_user(username, nil)
+function davt:init_user_from_username(username)
+    return self:init_user(username, nil)
 end
 
-M.setfsuid = setfsuid
-M.setgid = setgid
-M.setgroups = setgroups
-M.set_user = set_user
-M.init_user = init_user
-M.init_user_from_uid = init_user_from_uid
-M.init_user_from_username = init_user_from_username
-
-return M
+return davt
