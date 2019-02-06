@@ -109,17 +109,17 @@ end
 function davt:setfsuid(uid)
     self:check_access()
 
+    uid = tonumber(uid)
     if uid == nil or uid == 0 then
-        ngx.log(ngx.CRIT, "davt: no uid specified")
+        ngx.log(ngx.CRIT, "davt: invalid or no uid specified")
         ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
     end
 
     -- Two calls are always needed for setfsuid
-    local _uid = tonumber(uid)
-    _setfsuid(_uid)
-    local actual = _setfsuid(_uid)
+    _setfsuid(uid)
+    local actual = _setfsuid(uid)
 
-    if actual ~= _uid then
+    if actual ~= uid then
         ngx.log(ngx.CRIT, "davt: setfsuid failed")
         ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
     end
@@ -131,17 +131,17 @@ end
 function davt:setfsgid(gid)
     self:check_access()
 
+    gid = tonumber(gid)
     if gid == nil or gid == 0 then
-        ngx.log(ngx.CRIT, "davt: no gid specified")
+        ngx.log(ngx.CRIT, "davt: invalid or no gid specified")
         ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
     end
 
     -- Two calls are always needed for setfsuid
-    local _gid = tonumber(gid)
-    _setfsgid(_gid)
-    local actual = _setfsgid(_gid)
+    _setfsgid(gid)
+    local actual = _setfsgid(gid)
 
-    if actual ~= _gid then
+    if actual ~= gid then
         ngx.log(ngx.CRIT, "davt: setfsgid failed")
         ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
     end
@@ -157,11 +157,12 @@ end
 function davt:initgroups(username, gid)
     self:check_access()
 
+    gid = tonumber(gid)
     if gid == nil or gid == 0 then
-        ngx.log(ngx.CRIT, "davt: no gid specified")
+        ngx.log(ngx.CRIT, "davt: invalid or no gid specified")
         ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
     end
-    if not _initgroups(username, tonumber(gid)) then
+    if not _initgroups(username, gid) then
         ngx.log(ngx.CRIT, "davt: initgroups failed")
         ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
     end
@@ -176,11 +177,12 @@ function davt:setgroups(groups)
 
     _groups = {}
     for i, group in ipairs(groups) do
+        group = tonumber(group)
         if group == nil or group == 0 then
-            ngx.log(ngx.CRIT, "davt: nil group found in groups list")
+            ngx.log(ngx.CRIT, "davt: invalid group in groups")
             ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
         end
-        _groups[i] = tonumber(group)
+        _groups[i] = group
     end
     if not syscall_api.setgroups(_groups) then
         ngx.log(ngx.CRIT, "davt: setgroups failed")
@@ -200,21 +202,22 @@ end
 function davt:init_user(username, uid)
     self:check_access()
 
+    uid = tonumber(uid)
     local passwd
     if username then
         passwd = ffi.C.getpwnam(username)
     elseif uid and uid ~= 0 then
-        passwd = ffi.C.getpwuid(tonumber(uid))
+        passwd = ffi.C.getpwuid(uid)
     end
 
     if passwd == nil then
-        ngx.log(ngx.CRIT, "No valid username or uid")
+        ngx.log(ngx.CRIT, "davt: no valid username or uid specified")
         ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
     end
 
     -- Could get UID and groups here from REMOTE_USER via /etc/passwd
     -- Set FSUID
-    ngx.log(ngx.NOTICE, "[Impersonating UID #" .. passwd.pw_uid ..
+    ngx.log(ngx.NOTICE, "davt: [Impersonating UID #" .. passwd.pw_uid ..
             ", GID #" .. passwd.pw_gid .. "]")
     self:setfsuid(passwd.pw_uid)
     self:setfsgid(passwd.pw_gid)
@@ -235,7 +238,7 @@ end
 function davt:set_user(uid, gid, groups)
     self:check_access()
 
-    ngx.log(ngx.NOTICE, "[Impersonating UID #" .. uid ..
+    ngx.log(ngx.NOTICE, "davt: [Impersonating UID #" .. uid ..
             ", GID #" .. gid .. "]")
     self:setfsuid(uid)
     self:setfsgid(gid)
