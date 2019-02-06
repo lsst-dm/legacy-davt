@@ -107,14 +107,8 @@ end
 -- This is the nginx-friendly function.
 -- @param uid The UID of the user for filesytem operations.
 function davt:setfsuid(uid)
-    -- Note: This is possibly unecessary, as it appears to be the case that
-    -- files are always opened in the worker process and _often_
-    -- processed in a thread, and that once you have the handle it's
-    -- the file system wiill always honor it. So, it may be the case that
-    -- setuid would work just fine, but setfsuid is still nice because you
-    -- don't need to worry about saved UIDs
-
     self:check_access()
+
     if uid == nil or uid == 0 then
         ngx.log(ngx.CRIT, "davt: no uid specified")
         ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
@@ -135,15 +129,8 @@ end
 -- This is the nginx-friendly function.
 -- @param gid The GID of the user for filesytem operations.
 function davt:setfsgid(gid)
-    -- Note: This is possibly unecessary, as it appears to be the case that
-    -- files are always opened in the worker process and _often_
-    -- processed in a thread, and that once you have the handle it's
-    -- the file system wiill always honor it. So, it may be the case that
-    -- setuid would work just fine, but setfsuid is still nice because you
-    -- don't need to worry about saved UIDs
-    -- Two calls are always needed for setfsuid
-
     self:check_access()
+
     if gid == nil or gid == 0 then
         ngx.log(ngx.CRIT, "davt: no gid specified")
         ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
@@ -154,26 +141,8 @@ function davt:setfsgid(gid)
     _setfsgid(_gid)
     local actual = _setfsgid(_gid)
 
-    if actual ~= _uid then
+    if actual ~= _gid then
         ngx.log(ngx.CRIT, "davt: setfsgid failed")
-        ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
-    end
-end
-
---- Set the GID for the process
--- This is the nginx-friendly function. This should be the primary GID.
---
--- @param gid The GID for filesytem operations.
-function davt:setgid(gid)
-    self:check_access()
-
-    if gid == nil or gid == 0 then
-        ngx.log(ngx.CRIT, "davt: no gid specified")
-        ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
-    end
-
-    if not syscall_api.setgid(tonumber(gid)) then
-        ngx.log(ngx.CRIT, "davt: setgid failed")
         ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
     end
 end
@@ -248,7 +217,7 @@ function davt:init_user(username, uid)
     ngx.log(ngx.NOTICE, "[Impersonating UID #" .. passwd.pw_uid ..
             ", GID #" .. passwd.pw_gid .. "]")
     self:setfsuid(passwd.pw_uid)
-    self:setgid(passwd.pw_gid)
+    self:setfsgid(passwd.pw_gid)
     self:initgroups(passwd.pw_name, passwd.pw_gid)
 end
 
@@ -269,7 +238,7 @@ function davt:set_user(uid, gid, groups)
     ngx.log(ngx.NOTICE, "[Impersonating UID #" .. uid ..
             ", GID #" .. gid .. "]")
     self:setfsuid(uid)
-    self:setgid(gid)
+    self:setfsgid(gid)
     self:setgroups(groups)
 end
 
