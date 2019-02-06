@@ -23,7 +23,7 @@ local ffi = require("ffi")
 local syscall_api = require("syscall") -- loads ffi.C for us
 
 -- What's missing in ljsyscall
-ffi.cdef[[
+ffi.cdef [[
     int initgroups(const char *user, gid_t group);
     struct passwd {
         char   *pw_name;
@@ -74,9 +74,9 @@ function davt:new(opts)
         end
         local buf64 = ngx.encode_base64(ffi.string(buf))
         new_davt.secret = string.gsub(buf64, "=", "")
+        ngx.log(ngx.NOTICE, "davt: expecting secret in x-davt-secret header: "
+                .. new_davt.secret)
     end
-    ngx.log(ngx.NOTICE, "davt: expecting secret in x-davt-secret header: "  ..
-            new_davt.secret)
     return new_davt
 end
 
@@ -114,14 +114,14 @@ function davt:setfsuid(uid)
     -- don't need to worry about saved UIDs
 
     self:check_access()
-    -- Two calls are always needed for setfsuid
     if uid == nil or uid == 0 then
         ngx.log(ngx.CRIT, "davt: no uid specified")
         ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
     end
 
+    -- Two calls are always needed for setfsuid
     local _uid = tonumber(uid)
-    local previous = _setfsuid(_uid)
+    _setfsuid(_uid)
     local actual = _setfsuid(_uid)
 
     if actual ~= _uid then
@@ -134,8 +134,6 @@ end
 -- This is the nginx-friendly function.
 -- @param gid The GID of the user for filesytem operations.
 function davt:setfsgid(gid)
-    self:check_access()
-
     -- Note: This is possibly unecessary, as it appears to be the case that
     -- files are always opened in the worker process and _often_
     -- processed in a thread, and that once you have the handle it's
@@ -143,13 +141,16 @@ function davt:setfsgid(gid)
     -- setuid would work just fine, but setfsuid is still nice because you
     -- don't need to worry about saved UIDs
     -- Two calls are always needed for setfsuid
+
+    self:check_access()
     if gid == nil or gid == 0 then
         ngx.log(ngx.CRIT, "davt: no gid specified")
         ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
     end
 
+    -- Two calls are always needed for setfsuid
     local _gid = tonumber(gid)
-    local previous = _setfsgid(_gid)
+    _setfsgid(_gid)
     local actual = _setfsgid(_gid)
 
     if actual ~= _uid then
@@ -209,7 +210,7 @@ function davt:setgroups(groups)
             ngx.log(ngx.CRIT, "davt: nil group found in groups list")
             ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
         end
-      _groups[i] = tonumber(group)
+        _groups[i] = tonumber(group)
     end
     if not syscall_api.setgroups(_groups) then
         ngx.log(ngx.CRIT, "davt: setgroups failed")
@@ -264,7 +265,8 @@ end
 function davt:set_user(uid, gid, groups)
     self:check_access()
 
-    ngx.log(ngx.NOTICE, "[Impersonating UID #" .. uid .. ", GID #" .. gid .. "]")
+    ngx.log(ngx.NOTICE, "[Impersonating UID #" .. uid ..
+            ", GID #" .. gid .. "]")
     self:setfsuid(uid)
     self:setgid(gid)
     self:setgroups(groups)
