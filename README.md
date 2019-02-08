@@ -1,11 +1,11 @@
 # davt
 
-davt is a lua module for nginx to aid with impersonation. It's target use case is for use with 
+`davt` is a lua module for nginx to aid with impersonation. Its target use case is for use with 
 WebDAV, so that all operations are executed _as the user in the request_. 
 
-For every incoming request, davt enables nginx to switch the OS user (e.g. setfsuid) and/or group 
-IDs/supplementary group IDs (via setfsgid, setgroups, initgroups) to match the authenticated user 
-or specific groups before performing any file opertions.
+For every incoming request, davt enables nginx to switch the OS user (with `setfsuid`) and/or 
+group IDs/supplementary group IDs (via `setfsgid`, `setgroups`, `initgroups`) to match the 
+authenticated user or specific groups before performing any file opertions.
 
 As davt enables impersonation, a few properties follow:
 
@@ -17,16 +17,29 @@ you to transperently operate the service over existing directories.
 created for the user via WebDAV are also readable when the user is in a shell, for example.
 
 ## Requirements
-davt requires ljsyscall. It also used the ffi from LuaJIT.
+davt requires ljsyscall. It also used the ffi library from LuaJIT.
 
 ## Deployment
 
-davt is only compatible with linux. davt, as it seems now, must be ran as root. It is recommended 
-that you drop all capabilities EXCEPT CAP_SETGID and CAPS_SETUID, although it seems like 
-CAP_SETPCAP may be necessary, as well as CAP_NET_BIND_SERVICE if you want to bind to a privileged 
-port (ports 80, 443, etc...).
+davt is only compatible with Linux. davt must be ran as root. It is recommended 
+that you drop all capabilities EXCEPT `CAP_SETGID` and `CAP_SETUID`, although it seems like 
+`CAP_SETPCAP` may be necessary, as well as `CAP_NET_BIND_SERVICE` if you want to bind to a 
+privileged port (ports 80, 443, etc...).
 
 As davt allows impersonation, all incoming requests to davt MUST match a preset secret that the 
-davt lua object is configured with. This secret may be an empty string, which *DISABLES* this 
-check, but it must still be explicitly set. If no secret is set, davt will set a random secret at 
-startup and print that out to the log.
+davt lua object is configured with. If it is desired to disable checkin, setting the secret 
+explicitly to the empty string can be used, as in the following example:
+
+
+```lua
+local lua_davt = require("davt")
+local davt = lua_davt:new({secret = ""})
+```
+
+If no secret is explicitly set, davt will set a random secret at startup, printing that secret 
+out to the log. The following code will do that:
+
+```lua
+local lua_davt = require("davt")
+local davt = lua_davt:new()
+```
