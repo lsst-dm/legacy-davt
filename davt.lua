@@ -42,6 +42,8 @@ ffi.cdef [[
 ]]
 
 local davt = {}
+local NOBODY = 65534
+local MAX_RESERVED_ID = 499
 
 local function _initgroups(user, gid)
     return ffi.C.initgroups(user, gid) == 0
@@ -53,6 +55,16 @@ end
 
 local function _setfsgid(id)
     return ffi.C.setfsgid(ffi.typeof("unsigned int")(id))
+end
+
+--- Sanitize a uid or gid.
+-- We do not allow impersonation of reserved id numbers (< 500)
+local function _assert_valid_id(id)
+    id = tonumber(id)
+    if id == nil or id <= MAX_RESERVED_ID then
+        ngx.log(ngx.CRIT, "davt: invalid id or no id specified")
+        ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
+    end
 end
 
 --- Create a new davt object
@@ -102,18 +114,20 @@ function davt:check_access()
     end
 end
 
+--- Clear the uid, gid, and supplementary groups for the process.
+function davt:nobody()
+    new_davt:setfsuid(NOBODY)
+    new_davt:setfsgid(NOBODY)
+    new_davt:setgroups({})
+end
 
 --- Set the File System UID for the process.
 -- This is the nginx-friendly function.
--- @param uid The UID of the user for filesytem operations.
+-- @param uid The UID of the user for filesystem operations.
 function davt:setfsuid(uid)
     self:check_access()
 
-    uid = tonumber(uid)
-    if uid == nil or uid == 0 then
-        ngx.log(ngx.CRIT, "davt: invalid or no uid specified")
-        ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
-    end
+    uid = _assert_valid_id(uid)
 
     -- Two calls are always needed for setfsuid
     _setfsuid(uid)
@@ -127,17 +141,13 @@ end
 
 --- Set the File System GID for the process.
 -- This is the nginx-friendly function.
--- @param gid The GID of the user for filesytem operations.
+-- @param gid The GID of the user for filesystem operations.
 function davt:setfsgid(gid)
     self:check_access()
 
-    gid = tonumber(gid)
-    if gid == nil or gid == 0 then
-        ngx.log(ngx.CRIT, "davt: invalid or no gid specified")
-        ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
-    end
+    gid = _assert_valid_id(gid)
 
-    -- Two calls are always needed for setfsuid
+    -- Two calls are always needed for setfsgid
     _setfsgid(gid)
     local actual = _setfsgid(gid)
 
@@ -153,15 +163,11 @@ end
 -- to be available to the host.**
 --
 -- @param username
--- @param gid The GID for filesytem operations.
+-- @param gid The GID for filesystem operations.
 function davt:initgroups(username, gid)
     self:check_access()
 
-    gid = tonumber(gid)
-    if gid == nil or gid == 0 then
-        ngx.log(ngx.CRIT, "davt: invalid or no gid specified")
-        ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
-    end
+    gid = _assert_valid_id(gid)
     if not _initgroups(username, gid) then
         ngx.log(ngx.CRIT, "davt: initgroups failed")
         ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
@@ -177,11 +183,7 @@ function davt:setgroups(groups)
 
     _groups = {}
     for i, group in ipairs(groups) do
-        group = tonumber(group)
-        if group == nil or group == 0 then
-            ngx.log(ngx.CRIT, "davt: invalid group in groups")
-            ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
-        end
+        group = _assert_valid_id(group)
         _groups[i] = group
     end
     if not syscall_api.setgroups(_groups) then
@@ -202,16 +204,16 @@ end
 function davt:init_user(username, uid)
     self:check_access()
 
-    uid = tonumber(uid)
     local passwd
     if username then
         passwd = ffi.C.getpwnam(username)
-    elseif uid and uid ~= 0 then
+    elseif uid then
+        uid = _assert_valid_id(uid)
         passwd = ffi.C.getpwuid(uid)
     end
 
     if passwd == nil then
-        ngx.log(ngx.CRIT, "davt: no valid username or uid specified")
+        ngx.log(ngx.CRIT, "davt: no valid username or id specified")
         ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
     end
 
