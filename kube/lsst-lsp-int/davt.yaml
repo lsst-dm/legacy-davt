@@ -60,9 +60,21 @@ kind: Ingress
 metadata:
   annotations:
     kubernetes.io/ingress.class: nginx
-    nginx.ingress.kubernetes.io/auth-url: "https://lsst-lsp-int.ncsa.illinois.edu/auth"
-    nginx.ingress.kubernetes.io/auth-response-headers: X-Auth-Request-Uid
-    # nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/auth-url: "https://lsst-lsp-int.ncsa.illinois.edu/auth?capability=read:workspace"
+    # This _could_ work if we upgrade the ingress controller
+    # nginx.ingress.kubernetes.io/auth-snippet: |
+    #   set $capability_operation "";
+    #   if ( $request_method ~ ^(HEAD|GET|OPTIONS|PROPFIND)$ ) {
+    #       set $capability_operation "read";
+    #   }
+    #   if ( $request_method ~ ^(POST|PUT|PATCH|DELETE|PROPPATCH|MKCOL|COPY|MOVE)$ ) {
+    #       set $capability_operation "write";
+    #   }
+
+    nginx.ingress.kubernetes.io/auth-sign-in: "https://lsst-lsp-int.ncsa.illinois.edu/oauth2/sign_in"
+    nginx.ingress.kubernetes.io/auth-request-redirect: "$request_uri"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      error_page 403 = "https://lsst-lsp-int.ncsa.illinois.edu/oauth2/start?rd=$request_uri";
 
   name: davt-ingress
 spec:
