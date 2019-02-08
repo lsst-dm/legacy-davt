@@ -65,6 +65,7 @@ local function _assert_valid_id(id)
         ngx.log(ngx.CRIT, "davt: invalid id or no id specified")
         ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
     end
+    return id
 end
 
 --- Create a new davt object
