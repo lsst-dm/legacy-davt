@@ -1,0 +1,11 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: davt
+spec:
+  selector:
+    app: davt
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80

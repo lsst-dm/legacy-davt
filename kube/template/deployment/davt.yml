@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: davt
+  labels:
+    app: davt
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: davt
+  template:
+    metadata:
+      labels:
+        app: davt
+    spec:
+      containers:
+      - name: davt
+        image: lsstdm/davt
+        ports:
+        - containerPort: 8080
+        volumeMounts:
+        - name: davt-nginx-config-volume
+          mountPath: "/etc/nginx/nginx.conf"
+          subPath: nginx.conf
+          readOnly: true
+        - mountPath: /cache
+          name: cache-volume
+        - name: davt-datasets-volume
+          mountPath: "/datasets"
+          readOnly: true
+      volumes:
+      - name: davt-nginx-config-volume
+        configMap:
+          name: davt-nginx-config
+      - name: davt-datasets-volume
+        persistentVolumeClaim:
+          claimName: datasets-lsst-pdac
+      - name: cache-volume
+        emptyDir: {}
