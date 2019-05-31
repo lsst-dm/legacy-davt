@@ -1,0 +1,7 @@
+# Ignore everything
+**
+
+# What we want
+!davt.lua
+!test.lua
+!rootfs
