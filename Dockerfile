@@ -61,23 +61,18 @@ ARG BUILD_PATH
 ENV DEBIAN_FRONTEND noninteractive
 
 RUN apt-get update && \
-apt-get install --no-install-recommends --no-install-suggests -y \
-  curl \
-  ca-certificates \
-  libcurl4-openssl-dev \
-  libyajl-dev \
-  lua5.1-dev \
-  luarocks \
-  libxml2 libcap2-bin && \
-  rm -rf /var/lib/apt/lists/*
-
-RUN apt-get clean && rm -rf /var/lib/apt/lists/*
+    apt-get install --no-install-recommends --no-install-suggests -y \
+    curl \
+    ca-certificates \
+    libcurl4-openssl-dev \
+    libyajl-dev \
+    lua5.1-dev \
+    luarocks \
+    libxml2 libcap2-bin && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
 RUN ln -s /usr/lib/x86_64-linux-gnu/liblua5.1.so /usr/lib/liblua.so; \
     ln -s /usr/lib/x86_64-linux-gnu /usr/lib/lua-platform-path
-
-ENV LUAJIT_LIB="/usr/lib/x86_64-linux-gnu"
-ENV LUAJIT_INC="/usr/include/luajit-2.0"
 
 # Copy Over Modules
 COPY --from=build ${BUILD_PATH}/modules* /usr/lib/nginx/modules/
